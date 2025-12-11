@@ -13,9 +13,17 @@ let firstPersonControls = null;
 let firstPersonVelocity = { x: 0, y: 0, z: 0 };
 let firstPersonKeys = {};
 const firstPersonSpeed = 0.3;
-const gravity = 0.02;
+const gravity = 0.05; // 🏋️ Gravedad aumentada para caída más rápida y realista
+const playerEyeHeight = 1.6; // 👁️ Altura de los ojos del jugador sobre el suelo
 let firstPersonY = 2; // Altura del jugador
 let isJumping = false;
+
+// 🎯 Sistema de colisiones con bloques sólidos
+const solidBlocks = []; // Array que almacena todos los bloques para detección de colisiones
+
+// 🦘 Variables para salto mejorado
+const jumpForce = 0.15; // Fuerza de impulso vertical al saltar
+let isOnGround = false; // Indica si el jugador está tocando el suelo
 
 // Variables para detectar colisión con lava
 const lavaCheckRadius = 1.2; // Radio para detectar colisión con lava
@@ -368,6 +376,15 @@ function addBlock(modelName, x, y, z, rotation = 0, scale = 1) {
     if (modelName === 'lava') {
         block.userData.isLava = true;
         lavaBlocks.push(block);
+    }
+    
+    // 🧱 Registrar bloque sólido en array de colisiones (todos excepto lava y portal)
+    if (modelName !== 'lava' && modelName !== 'portalSurface') {
+        solidBlocks.push({
+            position: { x, y, z },
+            dimensions: { width: 1 * scale, height: 1 * scale, depth: 1 * scale },
+            blockType: modelName
+        });
     }
     
     return block;
@@ -765,57 +782,70 @@ function createIsland() {
     addBlock('lava', -2, 1, -9);
     addBlock('lava', 2, 1, -9);
 
-    // ===== LAGO DE LAVA CENTRAL (al nivel Y=1 rodeando los puentes de netherbricks) =====
-    // Crear un lago circular grande alrededor de la estructura central y sus puentes
-    // El lago rodea pero no sobrescribe los puentes conectores
-    const lavaLakeRadius = 5; // Radio del lago
-    const lakeCenterX = 0, lakeCenterZ = 0;
+    // ===== LAGO DE LAVA EN FORMA DE CRUZ (al nivel Y=1) =====
+    // Crear ríos de lava en forma de cruz desde el centro hasta los bordes de la isla
+    // La cruz se extiende hasta los bordes donde caerá en cascadas
     
-    for (let x = -lavaLakeRadius; x <= lavaLakeRadius; x++) {
-        for (let z = -lavaLakeRadius; z <= lavaLakeRadius; z++) {
-            const distFromCenter = Math.sqrt(x * x + z * z);
-            
-            // Crear lago de lava entre radio 3 y 5 (anillo de lava)
-            if (distFromCenter > 2.5 && distFromCenter <= lavaLakeRadius) {
-                // Evitar sobrescribir estructuras existentes (puentes conectores)
-                if (Math.abs(x) <= 2 && Math.abs(z) <= 2) continue; // Centro ocupado
-                // Respetar puentes norte, sur, este, oeste
-                if (x === 0 && Math.abs(z) <= 8) continue; // Puente norte-sur
-                if (z === 0 && Math.abs(x) <= 8) continue; // Puente este-oeste
-                // Respetar conexiones diagonales
-                if ((x === 1 || x === 2 || x === 3) && (z === -8 || z === -7 || z === -6)) continue; // Diagonal NE
-                if ((x === -1 || x === -2 || x === -3) && (z === -8 || z === -7 || z === -6)) continue; // Diagonal NO
-                if ((x === 1 || x === 2 || x === 3) && (z === 8 || z === 7 || z === 6)) continue; // Diagonal SE
-                if ((x === -1 || x === -2 || x === -3) && (z === 8 || z === 7 || z === 6)) continue; // Diagonal SO
-                
-                addBlock('lava', x, 1, z);
-            }
+    // 🔥 BRAZO NORTE - ELIMINADO (para no bloquear el portal)
+    
+    // 🔥 BRAZO SUR de la cruz (Z positivo)
+    for (let z = 3; z <= 20; z++) {
+        // Ancho del río: 3 bloques
+        for (let x = -1; x <= 1; x++) {
+            addBlock('lava', x, 1, z);
         }
     }
-
-    // Agregar bloques de lava adicionales para expandir el lago
-    for (let x = -7; x <= 7; x++) {
-        for (let z = -7; z <= 7; z++) {
+    
+    // 🔥 BRAZO ESTE de la cruz (X positivo)
+    for (let x = 3; x <= 20; x++) {
+        // Ancho del río: 3 bloques
+        for (let z = -1; z <= 1; z++) {
+            addBlock('lava', x, 1, z);
+        }
+    }
+    
+    // 🔥 BRAZO OESTE de la cruz (X negativo)
+    for (let x = -3; x >= -20; x--) {
+        // Ancho del río: 3 bloques
+        for (let z = -1; z <= 1; z++) {
+            addBlock('lava', x, 1, z);
+        }
+    }
+    
+    // 🔥 CENTRO de la cruz - lago pequeño alrededor del origen
+    for (let x = -2; x <= 2; x++) {
+        for (let z = -2; z <= 2; z++) {
             const distFromCenter = Math.sqrt(x * x + z * z);
-            
-            // Crear zona de lava más amplia entre radio 5 y 7
-            if (distFromCenter > 3.5 && distFromCenter <= 7) {
-                // Evitar estructuras principales (puentes y plataformas)
-                if (Math.abs(x) <= 2 && Math.abs(z) <= 2) continue; // Centro
-                if (x === 0 && Math.abs(z) <= 9) continue; // Puente norte-sur extendido
-                if (z === 0 && Math.abs(x) <= 9) continue; // Puente este-oeste extendido
-                if (Math.abs(x) <= 5 && Math.abs(z) <= 5 && distFromCenter <= 5) continue; // Ya rellenado arriba
-                // Plataformas secundarias
-                if ((Math.abs(x) <= 2) && ((z >= -9 && z <= -7) || (z >= 7 && z <= 9))) continue; // Plataformas N/S
-                if ((Math.abs(z) <= 2) && ((x >= -11 && x <= -9) || (x >= 9 && x <= 11))) continue; // Plataformas E/O
-                
-                // Solo añadir algunos bloques para efecto de "pozos" conectados
-                if (Math.random() < 0.4) {
+            // Solo llenar las áreas que no están ocupadas por la torre central
+            if (distFromCenter > 1 && distFromCenter <= 2.5) {
+                // Evitar sobrescribir la torre central y estructura de netherbricks
+                if (!(x === 0 && z === 0)) {
                     addBlock('lava', x, 1, z);
                 }
             }
         }
     }
+    
+    console.log('🔥 Lago de lava en forma de CRUZ creado - se extiende hasta los bordes');
+    
+    // ===== CASCADAS EN LOS EXTREMOS DE LA CRUZ =====
+    // Las cascadas caerán desde los extremos de cada brazo de la cruz
+    
+    // Netherrack de soporte en los puntos de cascada
+    const cascadePoints = [
+        { x: 0, z: -20 },   // Norte
+        { x: 0, z: 20 },    // Sur
+        { x: 20, z: 0 },    // Este
+        { x: -20, z: 0 }    // Oeste
+    ];
+    
+    cascadePoints.forEach(point => {
+        // Agregar netherrack de soporte en Y=1 y Y=0
+        addBlock('netherrack', point.x, 1, point.z);
+        addBlock('netherrack', point.x, 0, point.z);
+    });
+    
+    console.log('🌋 Puntos de cascada preparados en los extremos de la cruz');
 
     // ===== DETALLES DECORATIVOS =====
 
@@ -911,90 +941,27 @@ function setupLavaAnimations() {
     scene.add(lavaParticles);
 
     // 3. Crear cascadas de lava (bloques cayendo)
-    // ===== NETHERRACK ENCIMA DE LAS CASCADAS - Conexión con bordes =====
-    // Agregar netherrack en los puntos de cascada para que se conecten con los bordes existentes
+    // ===== 🌊 CASCADAS EN LOS EXTREMOS DE LA CRUZ =====
+    // Las cascadas caen desde los 4 extremos de la cruz de lava
     
-    // Netherrack en cascadas principales (bordes)
-    addBlock('netherrack', -11, 1, 2);
-    addBlock('netherrack', 11, 1, -1);
-    addBlock('netherrack', 1, 1, 11);
-    addBlock('netherrack', -3, 1, -11);
+    // 🌊 CASCADAS EN LOS 3 PUNTOS CARDINALES (SUR, ESTE, OESTE)
+    // Cada cascada tiene 3 bloques de ancho (coincide con el ancho de los ríos de lava)
+    // NO hay cascada NORTE para no bloquear el portal
     
-    // Netherrack en cascadas de esquinas
-    addBlock('netherrack', -15, 1, -15);
-    addBlock('netherrack', 15, 1, -15);
-    addBlock('netherrack', 15, 1, 15);
-    addBlock('netherrack', -15, 1, 15);
+    // Cascada SUR (extremo del brazo sur)
+    for (let x = -1; x <= 1; x++) {
+        createLavaCascade(x, 20, 15, false);
+    }
     
-    // Netherrack en cascadas de puntos cardinales extremos
-    addBlock('netherrack', 0, 1, -18);
-    addBlock('netherrack', 0, 1, 18);
-    addBlock('netherrack', 18, 1, 0);
-    addBlock('netherrack', -18, 1, 0);
+    // Cascada ESTE (extremo del brazo este)
+    for (let z = -1; z <= 1; z++) {
+        createLavaCascade(20, z, 15, false);
+    }
     
-    // Agregar más netherrack en Y=0 para conexión más sólida con los bordes
-    // Cascadas principales
-    addBlock('netherrack', -11, 0, 2);
-    addBlock('netherrack', 11, 0, -1);
-    addBlock('netherrack', 1, 0, 11);
-    addBlock('netherrack', -3, 0, -11);
-    
-    // Esquinas
-    addBlock('netherrack', -15, 0, -15);
-    addBlock('netherrack', 15, 0, -15);
-    addBlock('netherrack', 15, 0, 15);
-    addBlock('netherrack', -15, 0, 15);
-    
-    // Puntos cardinales extremos
-    addBlock('netherrack', 0, 0, -18);
-    addBlock('netherrack', 0, 0, 18);
-    addBlock('netherrack', 18, 0, 0);
-    addBlock('netherrack', -18, 0, 0);
-
-    // Cascadas principales en los BORDES de la isla - posicionadas debajo de lava estática en los bordes
-    const cascadePositions = [
-        { x: -11, z: 2 },   // Borde oeste-norte
-        { x: 11, z: -1 },   // Borde este-norte
-        { x: 1, z: 11 },    // Borde sur
-        { x: -3, z: -11 }   // Borde norte
-    ];
-
-    cascadePositions.forEach(pos => {
-        createLavaCascade(pos.x, pos.z, 12, false); // 12 bloques de cascada, altura de bordes
-    });
-
-    // Cascadas en la ISLA CENTRAL - debajo de los puentes
-    const centralCascades = [
-        { x: -1, z: -3 },   // Debajo de puente norte
-        { x: 1, z: 3 },     // Debajo de puente sur
-        { x: 3, z: -1 },    // Debajo de puente este
-        { x: -3, z: 1 }     // Debajo de puente oeste
-    ];
-
-    centralCascades.forEach(pos => {
-        createLavaCascade(pos.x, pos.z, 12, true); // 12 bloques de cascada, altura central
-    });
-
-    // Cascadas de los bordes exteriores de la isla
-    // Cascadas en las 4 esquinas
-    
-    // Esquina noroeste
-    createLavaCascade(-15, -15, 10, false);
-    
-    // Esquina noreste
-    createLavaCascade(15, -15, 10, false);
-    
-    // Esquina sureste
-    createLavaCascade(15, 15, 10, false);
-    
-    // Esquina suroeste
-    createLavaCascade(-15, 15, 10, false);
-
-    // Cascadas adicionales en los puntos cardinales en los bordes extremos
-    createLavaCascade(0, -18, 10, false);   // Cascada norte extremo
-    createLavaCascade(0, 18, 10, false);    // Cascada sur extremo
-    createLavaCascade(18, 0, 10, false);    // Cascada este extremo
-    createLavaCascade(-18, 0, 10, false);   // Cascada oeste extremo
+    // Cascada OESTE (extremo del brazo oeste)
+    for (let z = -1; z <= 1; z++) {
+        createLavaCascade(-20, z, 15, false);
+    }
 
     console.log('Animaciones de lava configuradas:');
     console.log('- Bloques de lava con UV scrolling:', lavaBlocks.length);
@@ -1007,13 +974,12 @@ function createLavaCascade(x, z, numDrops, isCentral = false) {
 
     // Crear una cascada fluida usando múltiples bloques espaciados continuamente
     // La cascada caerá 5 bloques y se reiniciará (efecto iterativo)
-    // Cascadas centrales: Y=0.5 (debajo de netherbricks Y=1)
-    // Cascadas de borde: Y=-1.5 (debajo de netherrack Y=0)
+    // 🌊 Cascadas comienzan en Y=0 (un bloque debajo de la lava estática en Y=1)
     for (let i = 0; i < numDrops; i++) {
         const drop = models['lava'].clone();
         // Espaciar bloques muy juntos para efecto de flujo continuo
-        // Si es cascada central, empezar desde Y=0.5, si no desde Y=-1.5
-        const startY = isCentral ? (0.5 - (i * 0.5)) : (-1.5 - (i * 0.5));
+        // Comenzar desde Y=0 (justo debajo de la lava estática)
+        const startY = 0 - (i * 0.5);
         drop.position.set(x, startY, z);
         drop.scale.set(1.0, 1.0, 1.0); // Tamaño completo para que se peguen
 
@@ -1030,9 +996,8 @@ function createLavaCascade(x, z, numDrops, isCentral = false) {
             }
         });
 
-        // Velocidad consistente y suave con pequeñas variaciones para efecto natural
-        // Cascadas centrales: velocidad más lenta (0.008), cascadas de borde: velocidad normal (0.015)
-        drop.userData.speed = isCentral ? (0.008 + (Math.random() * 0.001 - 0.0005)) : (0.015 + (Math.random() * 0.002 - 0.001));
+        // 💨 Velocidad aumentada para cascadas más rápidas y dramáticas
+        drop.userData.speed = isCentral ? (0.03 + (Math.random() * 0.001 - 0.0005)) : (0.04 + (Math.random() * 0.002 - 0.001));
         drop.userData.startY = startY;
         
         // Sistema iterativo: cascada de 5 bloques (5 * 0.5 = 2.5 unidades)
@@ -1148,26 +1113,164 @@ function animate() {
 // ============================================
 // SISTEMA DE CÁMARA EN PRIMERA PERSONA
 // ============================================
+
+// 🎯 Función para detectar colisiones con bloques sólidos usando AABB (Axis-Aligned Bounding Box)
+function checkCollision(newPosition) {
+    const playerRadius = 0.5; // Radio del cilindro del jugador
+    const playerHeight = 2;   // Altura del jugador
+    
+    // AABB del jugador (caja de colisión)
+    const playerBox = {
+        minX: newPosition.x - playerRadius,
+        maxX: newPosition.x + playerRadius,
+        minY: newPosition.y - 0.1, // Pies del jugador
+        maxY: newPosition.y + playerHeight - 0.1, // Cabeza del jugador
+        minZ: newPosition.z - playerRadius,
+        maxZ: newPosition.z + playerRadius
+    };
+    
+    // Verificar colisión con cada bloque sólido
+    for (let block of solidBlocks) {
+        const halfWidth = block.dimensions.width / 2;
+        const halfDepth = block.dimensions.depth / 2;
+        
+        // AABB del bloque
+        const blockBox = {
+            minX: block.position.x - halfWidth,
+            maxX: block.position.x + halfWidth,
+            minY: block.position.y,
+            maxY: block.position.y + block.dimensions.height,
+            minZ: block.position.z - halfDepth,
+            maxZ: block.position.z + halfDepth
+        };
+        
+        // Detectar intersección AABB
+        const collisionX = playerBox.minX < blockBox.maxX && playerBox.maxX > blockBox.minX;
+        const collisionY = playerBox.minY < blockBox.maxY && playerBox.maxY > blockBox.minY;
+        const collisionZ = playerBox.minZ < blockBox.maxZ && playerBox.maxZ > blockBox.minZ;
+        
+        if (collisionX && collisionY && collisionZ) {
+            return true; // ¡Colisión detectada!
+        }
+    }
+    
+    return false; // Sin colisión
+}
+
+// 👟 Función para detectar si el jugador está en el suelo
+function checkIsOnGround() {
+    const playerRadius = 0.5;
+    const groundCheckDistance = 0.2; // Aumentado para mejor detección
+    
+    // Posición de verificación ligeramente debajo del jugador
+    const checkPosition = {
+        x: firstPersonCamera.position.x,
+        y: firstPersonCamera.position.y - groundCheckDistance,
+        z: firstPersonCamera.position.z
+    };
+    
+    // AABB del área de verificación (muy delgada, solo debajo de los pies)
+    const checkBox = {
+        minX: checkPosition.x - playerRadius,
+        maxX: checkPosition.x + playerRadius,
+        minY: checkPosition.y - 0.1,
+        maxY: checkPosition.y + 0.1, // Aumentado para mejor detección
+        minZ: checkPosition.z - playerRadius,
+        maxZ: checkPosition.z + playerRadius
+    };
+    
+    // Verificar si hay un bloque debajo
+    for (let block of solidBlocks) {
+        const halfWidth = block.dimensions.width / 2;
+        const halfDepth = block.dimensions.depth / 2;
+        
+        const blockBox = {
+            minX: block.position.x - halfWidth,
+            maxX: block.position.x + halfWidth,
+            minY: block.position.y,
+            maxY: block.position.y + block.dimensions.height,
+            minZ: block.position.z - halfDepth,
+            maxZ: block.position.z + halfDepth
+        };
+        
+        const collisionX = checkBox.minX < blockBox.maxX && checkBox.maxX > blockBox.minX;
+        const collisionY = checkBox.minY < blockBox.maxY && checkBox.maxY > blockBox.minY;
+        const collisionZ = checkBox.minZ < blockBox.maxZ && checkBox.maxZ > blockBox.minZ;
+        
+        if (collisionX && collisionY && collisionZ) {
+            return true; // ¡Hay suelo debajo!
+        }
+    }
+    
+    return false; // En el aire
+}
+
 function updateFirstPersonMovement() {
     if (!isFirstPerson) return;
 
-    // Aplicar gravedad
-    const groundCheckDistance = 0.5;
-    let onGround = false;
+    // 🌍 Detectar si el jugador está en el suelo (revisar bloques debajo)
+    let groundHeight = 0; // Altura mínima del suelo
+    let foundGround = false;
     
-    // Verificar si estamos en el suelo (Y=0)
-    if (firstPersonY <= groundCheckDistance) {
-        onGround = true;
-        firstPersonY = groundCheckDistance;
-        firstPersonVelocity.y = 0;
-        isJumping = false;
-    } else {
+    const playerRadius = 0.4; // Radio de detección horizontal
+    
+    // Buscar el bloque más alto debajo del jugador
+    for (let block of solidBlocks) {
+        const halfWidth = block.dimensions.width / 2;
+        const halfDepth = block.dimensions.depth / 2;
+        
+        // Calcular distancias al centro del bloque
+        const distX = Math.abs(firstPersonCamera.position.x - block.position.x);
+        const distZ = Math.abs(firstPersonCamera.position.z - block.position.z);
+        
+        // Verificar si el jugador está sobre este bloque (horizontalmente)
+        // Usar radio más amplio para mejor detección
+        if (distX <= halfWidth + playerRadius && distZ <= halfDepth + playerRadius) {
+            
+            // El bloque está debajo del jugador
+            const blockTop = block.position.y + block.dimensions.height;
+            
+            // Si este bloque está cerca o debajo del jugador, considerarlo como suelo potencial
+            if (blockTop <= firstPersonY + 0.5) {
+                // Actualizar altura del suelo si este bloque es más alto
+                if (blockTop > groundHeight) {
+                    groundHeight = blockTop;
+                    foundGround = true;
+                }
+            }
+        }
+    }
+    
+    // Determinar si está en el suelo
+    const distanceToGround = firstPersonY - groundHeight;
+    isOnGround = foundGround && distanceToGround <= 0.15; // Aumentada tolerancia
+    
+    // 🏋️ Aplicar gravedad y física vertical
+    if (!isOnGround) {
         // Aplicar gravedad si no estamos en el suelo
         firstPersonVelocity.y -= gravity;
+        // Limitar velocidad de caída máxima
+        firstPersonVelocity.y = Math.max(firstPersonVelocity.y, -0.8); // Aumentada velocidad máxima
         firstPersonY += firstPersonVelocity.y;
+    } else {
+        // Estamos en el suelo, ajustar posición exactamente sobre el bloque
+        if (firstPersonY > groundHeight) {
+            firstPersonY = groundHeight;
+        }
+        if (firstPersonVelocity.y < 0) {
+            firstPersonVelocity.y = 0;
+        }
+        isJumping = false;
+    }
+    
+    // Evitar caer por debajo del nivel mínimo
+    if (firstPersonY < 0.5) {
+        firstPersonY = 0.5;
+        firstPersonVelocity.y = 0;
+        isOnGround = true;
     }
 
-    // Movimiento horizontal (WASD)
+    // 🏃 Movimiento horizontal (WASD)
     const moveDirection = new THREE.Vector3();
     const forward = new THREE.Vector3();
     const right = new THREE.Vector3();
@@ -1186,37 +1289,14 @@ function updateFirstPersonMovement() {
     if (firstPersonKeys['a'] || firstPersonKeys['A']) moveDirection.addScaledVector(right, -firstPersonSpeed);
     if (firstPersonKeys['d'] || firstPersonKeys['D']) moveDirection.addScaledVector(right, firstPersonSpeed);
     
-    // Aplicar movimiento
-    const newPosX = firstPersonCamera.position.x + moveDirection.x;
-    const newPosZ = firstPersonCamera.position.z + moveDirection.z;
+    // � Aplicar movimiento directamente (sin colisiones complejas por ahora)
+    firstPersonCamera.position.x += moveDirection.x;
+    firstPersonCamera.position.z += moveDirection.z;
     
-    // Colisión simple con bloques: no pasar através de netherrack/netherbricks
-    const playerCollisionRadius = 0.3;
-    const checkPos = new THREE.Vector3(newPosX, firstPersonY, newPosZ);
-    let collision = false;
-    
-    // Revisar colisión con bloques cercanos
-    scene.traverse((child) => {
-        if (child.userData.isBlock && child !== firstPersonCamera) {
-            const blockBox = new THREE.Box3().setFromObject(child);
-            const playerBox = new THREE.Box3(
-                new THREE.Vector3(newPosX - playerCollisionRadius, firstPersonY - 0.5, newPosZ - playerCollisionRadius),
-                new THREE.Vector3(newPosX + playerCollisionRadius, firstPersonY + 1.5, newPosZ + playerCollisionRadius)
-            );
-            if (playerBox.intersectsBox(blockBox)) {
-                collision = true;
-            }
-        }
-    });
-    
-    if (!collision) {
-        firstPersonCamera.position.x = newPosX;
-        firstPersonCamera.position.z = newPosZ;
-    }
-    
-    firstPersonCamera.position.y = firstPersonY;
+    // Actualizar posición Y de la cámara (altura de ojos = pies + 1.6)
+    firstPersonCamera.position.y = firstPersonY + playerEyeHeight;
 
-    // Detectar colisión con lava
+    // 🔥 Detectar colisión con lava
     checkLavaCollision();
 }
 
@@ -1258,18 +1338,30 @@ function checkLavaCollision() {
 
 function switchToFirstPersonMode() {
     isFirstPerson = true;
-    firstPersonCamera.position.copy(camera.position);
-    firstPersonCamera.position.y = firstPersonY;
+    
+    // 🎯 SPAWN EN CENTRO DE LA ISLA: Teleportar sobre glowstone central (0, 7.1, 0)
+    // Y=7.1 permite caer suavemente sobre el glows0.......tone en Y=6
+    firstPersonCamera.position.set(0, 7.1, 0);
+    firstPersonY = 7.1;
+    
+    // 🔄 Resetear velocidad y rotación
     firstPersonVelocity = { x: 0, y: 0, z: 0 };
     isJumping = false;
+    isOnGround = false;
+    
+    // Resetear rotación de la cámara (mirar hacia adelante)
+    firstPersonControls.euler.set(0, 0, 0, 'YXZ');
+    firstPersonCamera.quaternion.setFromEuler(firstPersonControls.euler);
     
     // Pointerlock para mejor control (opcional pero recomendado)
     if (canvas.requestPointerLock) {
         canvas.requestPointerLock();
     }
     
-    console.log('📍 Modo Primera Persona ACTIVADO');
-    console.log('Controles: W/A/S/D para mover, ESPACIO para saltar, ESC para salir');
+    console.log('📍 Modo Primera Persona ACTIVADO - Spawn en centro (0, 7.1, 0)');
+    console.log('🎮 Controles: W/A/S/D para mover, ESPACIO para saltar, ESC para salir');
+    console.log('🧱 Bloques sólidos registrados:', solidBlocks.length);
+    console.log('🔥 Bloques de lava:', lavaBlocks.length);
 }
 
 function switchToOrbitMode() {
@@ -1291,6 +1383,11 @@ function switchToOrbitMode() {
 document.addEventListener('keydown', (e) => {
     firstPersonKeys[e.key] = true;
     
+    // Debug: mostrar tecla presionada en primera persona
+    if (isFirstPerson && ['w','a','s','d','W','A','S','D',' '].includes(e.key)) {
+        console.log('⌨️ Tecla presionada:', e.key);
+    }
+    
     // P para activar/desactivar primera persona
     if (e.key === 'p' || e.key === 'P') {
         if (!isFirstPerson) {
@@ -1303,25 +1400,23 @@ document.addEventListener('keydown', (e) => {
         switchToOrbitMode();
     }
     
-    // ESPACIO para saltar
-    if (e.key === ' ' && isFirstPerson && !isJumping) {
-        firstPersonVelocity.y = 0.25; // Velocidad de salto
-        isJumping = true;
+    // 🦘 ESPACIO para saltar
+    if (e.key === ' ' && isFirstPerson) {
+        e.preventDefault(); // Prevenir scroll de página
+        
+        // Saltar si está en el suelo O velocidad vertical es cercana a 0 (más permisivo)
+        if (isOnGround || Math.abs(firstPersonVelocity.y) < 0.05) {
+            firstPersonVelocity.y = jumpForce; // Aplicar impulso vertical
+            isJumping = true;
+            console.log('🦘 ¡Salto! Y:', firstPersonY.toFixed(2), 'VelY:', firstPersonVelocity.y.toFixed(3));
+        } else {
+            console.log('❌ No salto - EnSuelo:', isOnGround, 'VelY:', firstPersonVelocity.y.toFixed(3));
+        }
     }
 });
 
 document.addEventListener('keyup', (e) => {
     firstPersonKeys[e.key] = false;
-});
-
-// Cambiar al modo primera persona con clic en el canvas
-canvas.addEventListener('click', (e) => {
-    if (!isFirstPerson && e.button === 0) { // Clic izquierdo
-        // Solo si el clic no fue en un elemento de control
-        if (e.target === canvas) {
-            switchToFirstPersonMode();
-        }
-    }
 });
 
 // ============================================

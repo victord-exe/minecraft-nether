@@ -454,8 +454,56 @@ Fase 2: Acabado y Export     ░░░░░░░░░░░░░░░░░
 Fase 3: Integración Three.js ░░░░░░░░░░░░░░░░░░░░   0%
 ```
 
-**Última actualización:** Enero 2025  
-**Progreso general:** 35% completado
+**Última actualización:** Diciembre 2025  
+**Progreso general:** 85% completado
+
+---
+
+## 🎮 CONTROLES Y CARACTERÍSTICAS NUEVAS (Actualización Diciembre 2025)
+
+### 📍 Sistema de Cámara en Primera Persona
+
+Se ha implementado un sistema de cámara en primera persona completamente funcional que permite:
+
+#### Activar Primera Persona
+- **Opción 1:** Presiona la tecla `P`
+- **Opción 2:** Haz clic izquierdo en el canvas
+
+#### Controles en Primera Persona
+| Tecla | Acción |
+|-------|--------|
+| **W** | Avanzar |
+| **A** | Mover a la izquierda |
+| **S** | Retroceder |
+| **D** | Mover a la derecha |
+| **ESPACIO** | Saltar |
+| **Ratón** | Mirar alrededor (rotación de cámara) |
+| **ESC** | Salir a vista panorámica |
+
+#### Características de Seguridad
+- ⚠️ **Detección de Lava:** Si tocas cualquier bloque de lava (central, cascadas, o bordes), el sistema **automáticamente regresa a la vista panorámica**
+- 🌍 **Gravedad Realista:** El jugador cae naturalmente con velocidad y aceleración física
+- 🚫 **Colisión con Suelo:** No puedes caer por debajo del nivel Y=0
+- 🔒 **Límites de Rotación:** No puedes hacer volteretas hacia atrás
+
+#### Lava - Velocidad Reducida
+- La lava de la **isla central ahora se mueve el 50% más lentamente** (0.008 vs 0.015)
+- Las cascadas de los **bordes mantienen velocidad normal** para contraste visual
+- Efecto visual más fluido y contemplativo
+
+---
+
+### 📹 Vistas Disponibles
+
+**Vista Panorámica (Predeterminada)**
+- Controles: Ratón derecho + arrastrar para rotar
+- Rueda del ratón: Zoom in/out
+- Perfecta para observar toda la isla
+
+**Vista Primera Persona**
+- Controles de movimiento completos
+- Perspectiva inmersiva
+- Protección contra lava automática
 
 ---
 

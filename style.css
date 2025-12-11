@@ -23,29 +23,31 @@ body {
     left: 20px;
     z-index: 100;
     background: rgba(0, 0, 0, 0.7);
-    padding: 20px;
+    padding: 12px 16px; /* Reducido de 20px */
     border-radius: 8px;
     border: 2px solid #8b0000;
     box-shadow: 0 0 20px rgba(139, 0, 0, 0.5);
+    max-width: 280px; /* Añadido límite de ancho */
 }
 
 #info h1 {
-    font-size: 24px;
-    margin-bottom: 10px;
+    font-size: 18px; /* Reducido de 24px */
+    margin-bottom: 8px; /* Reducido de 10px */
     color: #ff6b6b;
     text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
 }
 
 #info p {
-    font-size: 14px;
+    font-size: 11px; /* Reducido de 14px */
     color: #ffcccc;
-    margin-bottom: 8px;
+    margin-bottom: 6px; /* Reducido de 8px */
 }
 
 #loading {
-    font-size: 14px;
+    font-size: 16px;
     color: #ffd700;
     animation: pulse 1.5s ease-in-out infinite;
+    font-weight: bold;
 }
 
 @keyframes pulse {
@@ -59,4 +61,26 @@ body {
 
 #loading.hidden {
     display: none;
+}
+
+#controls {
+    margin-top: 10px; /* Reducido de 15px */
+    padding-top: 10px; /* Reducido de 15px */
+    border-top: 1px solid #8b0000;
+}
+
+#controls p {
+    font-size: 10px; /* Reducido de 12px */
+    color: #ffcccc;
+    margin-bottom: 4px; /* Reducido de 6px */
+    line-height: 1.3; /* Reducido de 1.4 */
+}
+
+kbd {
+    background: rgba(139, 0, 0, 0.3);
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid #8b0000;
+    font-weight: bold;
+    color: #ff6b6b;
 }

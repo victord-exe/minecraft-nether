@@ -66,6 +66,7 @@ const totalModels = Object.keys(modelPaths).length;
 const lavaBlocks = [];
 const lavaCascades = [];
 let lavaParticles = null;
+const mobs = []; // Array para almacenar referencias a criaturas
 
 // ============================================
 // CONFIGURACIÓN DE ESCENA
@@ -123,23 +124,23 @@ firstPersonCamera.position.set(0, firstPersonY, 0);
 // Controles para cámara en primera persona (solo rotación, no panorámica)
 firstPersonControls = {
     euler: new THREE.Euler(0, 0, 0, 'YXZ'),
-    onMouseMove: function(event) {
+    onMouseMove: function (event) {
         if (!isFirstPerson) return;
-        
+
         const deltaX = event.movementX || 0;
         const deltaY = event.movementY || 0;
-        
+
         // Obtener euler actual de la cámara
         this.euler.setFromQuaternion(firstPersonCamera.quaternion);
-        
+
         // Aplicar rotaciones manualmente
         this.euler.setFromQuaternion(firstPersonCamera.quaternion);
         this.euler.y -= deltaX * 0.003;  // Rotación horizontal (Y)
         this.euler.x -= deltaY * 0.003;  // Rotación vertical (X)
-        
+
         // Limitar rotación vertical para no hacer backflip
         this.euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.euler.x));
-        
+
         firstPersonCamera.quaternion.setFromEuler(this.euler);
     }
 };
@@ -200,7 +201,7 @@ function applyPixelArtFilter(object) {
                 // Configuración de sombras para todos los materiales
                 mat.castShadow = true;      // Proyectar sombras
                 mat.receiveShadow = true;   // Recibir sombras
-                
+
                 // Lista de todas las texturas que pueden existir en un material PBR
                 const textureTypes = [
                     'map',           // Base color/diffuse (textura principal)
@@ -231,14 +232,14 @@ function applyPixelArtFilter(object) {
                         console.log(`🎨 Filtro pixel-art aplicado a ${texType} del material`);
                     }
                 });
-                
+
                 // Mejorar propiedades visuales para sombras más realistas
                 if (mat.side === undefined) {
                     mat.side = THREE.FrontSide;
                 }
             });
         }
-        
+
         // Habilitar sombras en meshes
         if (child.isMesh) {
             child.castShadow = true;
@@ -307,7 +308,7 @@ function updateLoadingProgress() {
 }
 
 // Cargar todos los modelos
-let loadPromises = Object.entries(modelPaths).map(([name, path]) => 
+let loadPromises = Object.entries(modelPaths).map(([name, path]) =>
     loadModel(name, path).catch(error => {
         console.warn(`⚠️ Modelo ${name} no pudo cargarse, continuando...`);
         loadedCount++; // Contar como "cargado" para que el progreso avance
@@ -364,20 +365,20 @@ function addBlock(modelName, x, y, z, rotation = 0, scale = 1) {
     if (scale !== 1) {
         block.scale.multiplyScalar(scale);
     }
-    
+
     // Registrar para colisiones y física
     block.userData.isBlock = true;
     block.userData.blockType = modelName;
     block.userData.isWalkable = (modelName !== 'lava' && modelName !== 'portal_surface');
-    
+
     scene.add(block);
-    
+
     // Registrar bloques de lava para animación especial
     if (modelName === 'lava') {
         block.userData.isLava = true;
         lavaBlocks.push(block);
     }
-    
+
     // 🧱 Registrar bloque sólido en array de colisiones (todos excepto lava y portal)
     if (modelName !== 'lava' && modelName !== 'portalSurface') {
         solidBlocks.push({
@@ -386,7 +387,23 @@ function addBlock(modelName, x, y, z, rotation = 0, scale = 1) {
             blockType: modelName
         });
     }
-    
+
+    // 👻 Registrar mobs para IA
+    if (modelName === 'ghast' || modelName === 'blaze' || modelName === 'phantom') {
+        block.userData.isMob = true;
+
+        // Inicializar estado de movimiento aleatorio para Orbit Mode
+        block.userData.wanderTarget = new THREE.Vector3(
+            block.position.x + (Math.random() - 0.5) * 15,
+            block.position.y,
+            block.position.z + (Math.random() - 0.5) * 15
+        );
+        block.userData.wanderSpeed = 0.02 + Math.random() * 0.03;
+        block.userData.originalY = block.position.y; // Mantener altura aproximada
+
+        mobs.push(block);
+    }
+
     return block;
 }
 
@@ -400,10 +417,10 @@ function createIsland() {
     // 4 capas con efecto cónico: Y=0 (superficie), Y=-1, Y=-2, Y=-3 (punta)
 
     const layerConfig = [
-        { y: 0,  maxRadius: 20, solidRadius: 14, edgeChance: 0.6 },   // Superficie (más grande)
+        { y: 0, maxRadius: 20, solidRadius: 14, edgeChance: 0.6 },   // Superficie (más grande)
         { y: -1, maxRadius: 18, solidRadius: 12, edgeChance: 0.7 },   // Capa intermedia 1
         { y: -2, maxRadius: 15, solidRadius: 10, edgeChance: 0.8 },   // Capa intermedia 2
-        { y: -3, maxRadius: 12, solidRadius: 8,  edgeChance: 0.9 }    // Punta cónica (más pequeña)
+        { y: -3, maxRadius: 12, solidRadius: 8, edgeChance: 0.9 }    // Punta cónica (más pequeña)
     ];
 
     layerConfig.forEach(layer => {
@@ -456,7 +473,7 @@ function createIsland() {
 
     // PUENTES CONECTORES LARGOS - extienden desde el centro hacia los 4 lados cardinales
     // Estos puentes serán rodeados por el lago de lava creando islas de netherbricks
-    
+
     // PUENTE NORTE (hacia Z = -8 y más allá)
     for (let z = -3; z >= -8; z--) {
         // Ancho de 3 bloques para un puente robusto
@@ -464,7 +481,7 @@ function createIsland() {
             addBlock('netherBricks', x, 1, z);
         }
     }
-    
+
     // PUENTE SUR (hacia Z = 8 y más allá)
     for (let z = 3; z <= 8; z++) {
         // Ancho de 3 bloques para un puente robusto
@@ -472,7 +489,7 @@ function createIsland() {
             addBlock('netherBricks', x, 1, z);
         }
     }
-    
+
     // PUENTE ESTE (hacia X = 8 y más allá)
     for (let x = 3; x <= 8; x++) {
         // Ancho de 3 bloques para un puente robusto
@@ -480,7 +497,7 @@ function createIsland() {
             addBlock('netherBricks', x, 1, z);
         }
     }
-    
+
     // PUENTE OESTE (hacia X = -8 y más allá)
     for (let x = -3; x >= -8; x--) {
         // Ancho de 3 bloques para un puente robusto
@@ -496,21 +513,21 @@ function createIsland() {
             addBlock('netherBricks', x, 1, z);
         }
     }
-    
+
     // Plataforma sur (final del puente sur)
     for (let z = 7; z <= 9; z++) {
         for (let x = -2; x <= 2; x++) {
             addBlock('netherBricks', x, 1, z);
         }
     }
-    
+
     // Plataforma este (final del puente este)
     for (let x = 9; x <= 11; x++) {
         for (let z = -2; z <= 2; z++) {
             addBlock('netherBricks', x, 1, z);
         }
     }
-    
+
     // Plataforma oeste (final del puente oeste)
     for (let x = -11; x <= -9; x++) {
         for (let z = -2; z <= 2; z++) {
@@ -523,17 +540,17 @@ function createIsland() {
     for (let i = 0; i <= 3; i++) {
         addBlock('netherBricks', 2 + i, 1, -8 + i);
     }
-    
+
     // Conexión noroeste
     for (let i = 0; i <= 3; i++) {
         addBlock('netherBricks', -2 - i, 1, -8 + i);
     }
-    
+
     // Conexión sureste
     for (let i = 0; i <= 3; i++) {
         addBlock('netherBricks', 2 + i, 1, 8 - i);
     }
-    
+
     // Conexión suroeste
     for (let i = 0; i <= 3; i++) {
         addBlock('netherBricks', -2 - i, 1, 8 - i);
@@ -742,11 +759,11 @@ function createIsland() {
     addBlock('netherFortress', 40, -37, -26.5, Math.PI * 2, 50);
     // Túnel conectando
     addBlock('netherTunnel', 37, 3, -5, Math.PI * 2, 20);
-    
-    
+
+
     // Nether Fortresses como islas flotantes complementarias
     addBlock('skyblockFortress', -22, -19, 19, Math.PI * 2, 45);
-    addBlock('skyblockFortress', -30, -19, -21, Math.PI , 45);
+    addBlock('skyblockFortress', -30, -19, -21, Math.PI, 45);
     // Túnel conectando
     addBlock('netherTunnel', -26.5, 17.5, -1, Math.PI * 2, 20);
 
@@ -785,9 +802,9 @@ function createIsland() {
     // ===== LAGO DE LAVA EN FORMA DE CRUZ (al nivel Y=1) =====
     // Crear ríos de lava en forma de cruz desde el centro hasta los bordes de la isla
     // La cruz se extiende hasta los bordes donde caerá en cascadas
-    
+
     // 🔥 BRAZO NORTE - ELIMINADO (para no bloquear el portal)
-    
+
     // 🔥 BRAZO SUR de la cruz (Z positivo)
     for (let z = 3; z <= 20; z++) {
         // Ancho del río: 3 bloques
@@ -795,7 +812,7 @@ function createIsland() {
             addBlock('lava', x, 1, z);
         }
     }
-    
+
     // 🔥 BRAZO ESTE de la cruz (X positivo)
     for (let x = 3; x <= 20; x++) {
         // Ancho del río: 3 bloques
@@ -803,7 +820,7 @@ function createIsland() {
             addBlock('lava', x, 1, z);
         }
     }
-    
+
     // 🔥 BRAZO OESTE de la cruz (X negativo)
     for (let x = -3; x >= -20; x--) {
         // Ancho del río: 3 bloques
@@ -811,7 +828,7 @@ function createIsland() {
             addBlock('lava', x, 1, z);
         }
     }
-    
+
     // 🔥 CENTRO de la cruz - lago pequeño alrededor del origen
     for (let x = -2; x <= 2; x++) {
         for (let z = -2; z <= 2; z++) {
@@ -825,12 +842,12 @@ function createIsland() {
             }
         }
     }
-    
+
     console.log('🔥 Lago de lava en forma de CRUZ creado - se extiende hasta los bordes');
-    
+
     // ===== CASCADAS EN LOS EXTREMOS DE LA CRUZ =====
     // Las cascadas caerán desde los extremos de cada brazo de la cruz
-    
+
     // Netherrack de soporte en los puntos de cascada
     const cascadePoints = [
         { x: 0, z: -20 },   // Norte
@@ -838,13 +855,13 @@ function createIsland() {
         { x: 20, z: 0 },    // Este
         { x: -20, z: 0 }    // Oeste
     ];
-    
+
     cascadePoints.forEach(point => {
         // Agregar netherrack de soporte en Y=1 y Y=0
         addBlock('netherrack', point.x, 1, point.z);
         addBlock('netherrack', point.x, 0, point.z);
     });
-    
+
     console.log('🌋 Puntos de cascada preparados en los extremos de la cruz');
 
     // ===== DETALLES DECORATIVOS =====
@@ -943,21 +960,21 @@ function setupLavaAnimations() {
     // 3. Crear cascadas de lava (bloques cayendo)
     // ===== 🌊 CASCADAS EN LOS EXTREMOS DE LA CRUZ =====
     // Las cascadas caen desde los 4 extremos de la cruz de lava
-    
+
     // 🌊 CASCADAS EN LOS 3 PUNTOS CARDINALES (SUR, ESTE, OESTE)
     // Cada cascada tiene 3 bloques de ancho (coincide con el ancho de los ríos de lava)
     // NO hay cascada NORTE para no bloquear el portal
-    
+
     // Cascada SUR (extremo del brazo sur)
     for (let x = -1; x <= 1; x++) {
         createLavaCascade(x, 20, 15, false);
     }
-    
+
     // Cascada ESTE (extremo del brazo este)
     for (let z = -1; z <= 1; z++) {
         createLavaCascade(20, z, 15, false);
     }
-    
+
     // Cascada OESTE (extremo del brazo oeste)
     for (let z = -1; z <= 1; z++) {
         createLavaCascade(-20, z, 15, false);
@@ -999,7 +1016,7 @@ function createLavaCascade(x, z, numDrops, isCentral = false) {
         // 💨 Velocidad aumentada para cascadas más rápidas y dramáticas
         drop.userData.speed = isCentral ? (0.03 + (Math.random() * 0.001 - 0.0005)) : (0.04 + (Math.random() * 0.002 - 0.001));
         drop.userData.startY = startY;
-        
+
         // Sistema iterativo: cascada de 5 bloques (5 * 0.5 = 2.5 unidades)
         drop.userData.cascadeHeight = 5 * 0.5; // 2.5 unidades de caída
         drop.userData.resetY = startY + drop.userData.cascadeHeight; // Punto de reinicio
@@ -1032,9 +1049,9 @@ function animate() {
                 const materials = Array.isArray(child.material) ? child.material : [child.material];
                 materials.forEach(mat => {
                     if (mat.map) {
-                        // Mayor velocidad de scroll para efecto más notorio y fluido
-                        mat.map.offset.x += 0.005;
-                        mat.map.offset.y += 0.003; // Mayor velocidad vertical
+                        // Velocidad REDUCIDA drásticamente para corregir efecto de "bloque deslizante"
+                        mat.map.offset.x += 0.0005; // 10x más lento
+                        mat.map.offset.y += 0.0003;
                     }
                 });
             }
@@ -1099,6 +1116,38 @@ function animate() {
         });
     });
 
+    // 4. IA de Mobs (Mirar al jugador o deambular)
+    mobs.forEach(mob => {
+        if (isFirstPerson) {
+            // Modo Primera Persona: Mirar al jugador
+            // Ajustamos para que miren a la cámara pero manteniendo su altura (opcional, o full 3D lookAt)
+            mob.lookAt(firstPersonCamera.position);
+        } else {
+            // Modo Órbita: Deambular suavemente
+            if (!mob.userData.wanderTarget) return;
+
+            const target = mob.userData.wanderTarget;
+            const direction = new THREE.Vector3().subVectors(target, mob.position);
+            const dist = direction.length();
+
+            if (dist < 1.0) {
+                // Nuevo objetivo aleatorio cerca de su posición original para no alejarse mucho
+                // Ghasts vuelan más alto y lejos, Blazes más cerca del suelo
+                const range = mob.userData.blockType === 'ghast' ? 25 : 10;
+
+                mob.userData.wanderTarget.set(
+                    mob.position.x + (Math.random() - 0.5) * range,
+                    mob.userData.originalY + (Math.random() - 0.5) * 3, // Variación suave de altura
+                    mob.position.z + (Math.random() - 0.5) * range
+                );
+            } else {
+                direction.normalize();
+                mob.position.addScaledVector(direction, mob.userData.wanderSpeed);
+                mob.lookAt(target);
+            }
+        }
+    });
+
     // Actualizar controles
     if (isFirstPerson) {
         // Lógica de movimiento en primera persona
@@ -1118,7 +1167,7 @@ function animate() {
 function checkCollision(newPosition) {
     const playerRadius = 0.5; // Radio del cilindro del jugador
     const playerHeight = 2;   // Altura del jugador
-    
+
     // AABB del jugador (caja de colisión)
     const playerBox = {
         minX: newPosition.x - playerRadius,
@@ -1128,12 +1177,12 @@ function checkCollision(newPosition) {
         minZ: newPosition.z - playerRadius,
         maxZ: newPosition.z + playerRadius
     };
-    
+
     // Verificar colisión con cada bloque sólido
     for (let block of solidBlocks) {
         const halfWidth = block.dimensions.width / 2;
         const halfDepth = block.dimensions.depth / 2;
-        
+
         // AABB del bloque
         const blockBox = {
             minX: block.position.x - halfWidth,
@@ -1143,17 +1192,17 @@ function checkCollision(newPosition) {
             minZ: block.position.z - halfDepth,
             maxZ: block.position.z + halfDepth
         };
-        
+
         // Detectar intersección AABB
         const collisionX = playerBox.minX < blockBox.maxX && playerBox.maxX > blockBox.minX;
         const collisionY = playerBox.minY < blockBox.maxY && playerBox.maxY > blockBox.minY;
         const collisionZ = playerBox.minZ < blockBox.maxZ && playerBox.maxZ > blockBox.minZ;
-        
+
         if (collisionX && collisionY && collisionZ) {
             return true; // ¡Colisión detectada!
         }
     }
-    
+
     return false; // Sin colisión
 }
 
@@ -1161,14 +1210,14 @@ function checkCollision(newPosition) {
 function checkIsOnGround() {
     const playerRadius = 0.5;
     const groundCheckDistance = 0.2; // Aumentado para mejor detección
-    
+
     // Posición de verificación ligeramente debajo del jugador
     const checkPosition = {
         x: firstPersonCamera.position.x,
         y: firstPersonCamera.position.y - groundCheckDistance,
         z: firstPersonCamera.position.z
     };
-    
+
     // AABB del área de verificación (muy delgada, solo debajo de los pies)
     const checkBox = {
         minX: checkPosition.x - playerRadius,
@@ -1178,12 +1227,12 @@ function checkIsOnGround() {
         minZ: checkPosition.z - playerRadius,
         maxZ: checkPosition.z + playerRadius
     };
-    
+
     // Verificar si hay un bloque debajo
     for (let block of solidBlocks) {
         const halfWidth = block.dimensions.width / 2;
         const halfDepth = block.dimensions.depth / 2;
-        
+
         const blockBox = {
             minX: block.position.x - halfWidth,
             maxX: block.position.x + halfWidth,
@@ -1192,16 +1241,16 @@ function checkIsOnGround() {
             minZ: block.position.z - halfDepth,
             maxZ: block.position.z + halfDepth
         };
-        
+
         const collisionX = checkBox.minX < blockBox.maxX && checkBox.maxX > blockBox.minX;
         const collisionY = checkBox.minY < blockBox.maxY && checkBox.maxY > blockBox.minY;
         const collisionZ = checkBox.minZ < blockBox.maxZ && checkBox.maxZ > blockBox.minZ;
-        
+
         if (collisionX && collisionY && collisionZ) {
             return true; // ¡Hay suelo debajo!
         }
     }
-    
+
     return false; // En el aire
 }
 
@@ -1211,25 +1260,25 @@ function updateFirstPersonMovement() {
     // 🌍 Detectar si el jugador está en el suelo (revisar bloques debajo)
     let groundHeight = 0; // Altura mínima del suelo
     let foundGround = false;
-    
+
     const playerRadius = 0.4; // Radio de detección horizontal
-    
+
     // Buscar el bloque más alto debajo del jugador
     for (let block of solidBlocks) {
         const halfWidth = block.dimensions.width / 2;
         const halfDepth = block.dimensions.depth / 2;
-        
+
         // Calcular distancias al centro del bloque
         const distX = Math.abs(firstPersonCamera.position.x - block.position.x);
         const distZ = Math.abs(firstPersonCamera.position.z - block.position.z);
-        
+
         // Verificar si el jugador está sobre este bloque (horizontalmente)
         // Usar radio más amplio para mejor detección
         if (distX <= halfWidth + playerRadius && distZ <= halfDepth + playerRadius) {
-            
+
             // El bloque está debajo del jugador
             const blockTop = block.position.y + block.dimensions.height;
-            
+
             // Si este bloque está cerca o debajo del jugador, considerarlo como suelo potencial
             if (blockTop <= firstPersonY + 0.5) {
                 // Actualizar altura del suelo si este bloque es más alto
@@ -1240,11 +1289,11 @@ function updateFirstPersonMovement() {
             }
         }
     }
-    
+
     // Determinar si está en el suelo
     const distanceToGround = firstPersonY - groundHeight;
     isOnGround = foundGround && distanceToGround <= 0.15; // Aumentada tolerancia
-    
+
     // 🏋️ Aplicar gravedad y física vertical
     if (!isOnGround) {
         // Aplicar gravedad si no estamos en el suelo
@@ -1262,7 +1311,7 @@ function updateFirstPersonMovement() {
         }
         isJumping = false;
     }
-    
+
     // Evitar caer por debajo del nivel mínimo
     if (firstPersonY < 0.5) {
         firstPersonY = 0.5;
@@ -1274,25 +1323,25 @@ function updateFirstPersonMovement() {
     const moveDirection = new THREE.Vector3();
     const forward = new THREE.Vector3();
     const right = new THREE.Vector3();
-    
+
     // Obtener dirección forward (donde mira la cámara)
     firstPersonCamera.getWorldDirection(forward);
     forward.y = 0; // Solo en plano horizontal
     forward.normalize();
-    
+
     // Obtener dirección derecha
     right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-    
+
     // Procesar teclas WASD
     if (firstPersonKeys['w'] || firstPersonKeys['W']) moveDirection.addScaledVector(forward, firstPersonSpeed);
     if (firstPersonKeys['s'] || firstPersonKeys['S']) moveDirection.addScaledVector(forward, -firstPersonSpeed);
     if (firstPersonKeys['a'] || firstPersonKeys['A']) moveDirection.addScaledVector(right, -firstPersonSpeed);
     if (firstPersonKeys['d'] || firstPersonKeys['D']) moveDirection.addScaledVector(right, firstPersonSpeed);
-    
+
     // � Aplicar movimiento directamente (sin colisiones complejas por ahora)
     firstPersonCamera.position.x += moveDirection.x;
     firstPersonCamera.position.z += moveDirection.z;
-    
+
     // Actualizar posición Y de la cámara (altura de ojos = pies + 1.6)
     firstPersonCamera.position.y = firstPersonY + playerEyeHeight;
 
@@ -1338,26 +1387,26 @@ function checkLavaCollision() {
 
 function switchToFirstPersonMode() {
     isFirstPerson = true;
-    
+
     // 🎯 SPAWN EN CENTRO DE LA ISLA: Teleportar sobre glowstone central (0, 7.1, 0)
     // Y=7.1 permite caer suavemente sobre el glows0.......tone en Y=6
     firstPersonCamera.position.set(0, 7.1, 0);
     firstPersonY = 7.1;
-    
+
     // 🔄 Resetear velocidad y rotación
     firstPersonVelocity = { x: 0, y: 0, z: 0 };
     isJumping = false;
     isOnGround = false;
-    
+
     // Resetear rotación de la cámara (mirar hacia adelante)
     firstPersonControls.euler.set(0, 0, 0, 'YXZ');
     firstPersonCamera.quaternion.setFromEuler(firstPersonControls.euler);
-    
+
     // Pointerlock para mejor control (opcional pero recomendado)
     if (canvas.requestPointerLock) {
         canvas.requestPointerLock();
     }
-    
+
     console.log('📍 Modo Primera Persona ACTIVADO - Spawn en centro (0, 7.1, 0)');
     console.log('🎮 Controles: W/A/S/D para mover, ESPACIO para saltar, ESC para salir');
     console.log('🧱 Bloques sólidos registrados:', solidBlocks.length);
@@ -1368,12 +1417,12 @@ function switchToOrbitMode() {
     isFirstPerson = false;
     camera.position.copy(firstPersonCamera.position);
     camera.position.y = Math.max(camera.position.y, 5);
-    
+
     // Liberar pointerlock
     if (document.pointerLockElement) {
         document.exitPointerLock();
     }
-    
+
     console.log('🔄 Modo Panorámico ACTIVADO');
 }
 
@@ -1382,28 +1431,28 @@ function switchToOrbitMode() {
 // ============================================
 document.addEventListener('keydown', (e) => {
     firstPersonKeys[e.key] = true;
-    
+
     // Debug: mostrar tecla presionada en primera persona
-    if (isFirstPerson && ['w','a','s','d','W','A','S','D',' '].includes(e.key)) {
+    if (isFirstPerson && ['w', 'a', 's', 'd', 'W', 'A', 'S', 'D', ' '].includes(e.key)) {
         console.log('⌨️ Tecla presionada:', e.key);
     }
-    
+
     // P para activar/desactivar primera persona
     if (e.key === 'p' || e.key === 'P') {
         if (!isFirstPerson) {
             switchToFirstPersonMode();
         }
     }
-    
+
     // ESC para salir de primera persona
     if (e.key === 'Escape' && isFirstPerson) {
         switchToOrbitMode();
     }
-    
+
     // 🦘 ESPACIO para saltar
     if (e.key === ' ' && isFirstPerson) {
         e.preventDefault(); // Prevenir scroll de página
-        
+
         // Saltar si está en el suelo O velocidad vertical es cercana a 0 (más permisivo)
         if (isOnGround || Math.abs(firstPersonVelocity.y) < 0.05) {
             firstPersonVelocity.y = jumpForce; // Aplicar impulso vertical
@@ -1425,13 +1474,13 @@ document.addEventListener('keyup', (e) => {
 window.addEventListener('resize', () => {
     const width = window.innerWidth;
     const height = window.innerHeight;
-    
+
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    
+
     firstPersonCamera.aspect = width / height;
     firstPersonCamera.updateProjectionMatrix();
-    
+
     renderer.setSize(width, height);
 });
 

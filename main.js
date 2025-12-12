@@ -875,25 +875,25 @@ function createIsland() {
     addBlock('soulSand', -3, 1, 3);
 
     // Glowstone adicional para iluminación ambiental
-    addBlock('glowstone', 4, 2, -4);
-    addBlock('glowstone', -4, 2, 4);
-    addBlock('glowstone', 6, 1, 6);
-    addBlock('glowstone', -6, 1, -6);
+    // addBlock('glowstone', 4, 2, -4);
+    // addBlock('glowstone', -4, 2, 4);
+    // addBlock('glowstone', 6, 1, 6);
+    // addBlock('glowstone', -6, 1, -6);
 
     // Glowstone decorativo en los puentes conectores para iluminación
     // Puente norte
-    addBlock('glowstone', 0, 2, -5);
+    // addBlock('glowstone', 0, 2, -5);
     // Puente sur
-    addBlock('glowstone', 0, 2, 5);
+    // addBlock('glowstone', 0, 2, 5);
     // Puente este
-    addBlock('glowstone', 5, 2, 0);
+    // addBlock('glowstone', 5, 2, 0);
     // Puente oeste
-    addBlock('glowstone', -5, 2, 0);
+    // addBlock('glowstone', -5, 2, 0);
     // Plataformas secundarias
-    addBlock('glowstone', 0, 2, -8);
-    addBlock('glowstone', 0, 2, 8);
-    addBlock('glowstone', 8, 2, 0);
-    addBlock('glowstone', -8, 2, 0);
+    // addBlock('glowstone', 0, 2, -8);
+    // addBlock('glowstone', 0, 2, 8);
+    // addBlock('glowstone', 8, 2, 0);
+    // addBlock('glowstone', -8, 2, 0);
 
     console.log('🔥 Isla flotante del Nether expandida creada con éxito!');
     console.log('🌋 Bloques de lava:', lavaBlocks.length);
@@ -1423,6 +1423,10 @@ function switchToFirstPersonMode() {
     console.log('🎮 Controles: W/A/S/D para mover, ESPACIO para saltar, ESC para salir');
     console.log('🧱 Bloques sólidos registrados:', solidBlocks.length);
     console.log('🔥 Bloques de lava:', lavaBlocks.length);
+
+    // Mostrar UI (Crosshair + HUD)
+    document.getElementById('game-ui').classList.remove('hidden');
+    document.getElementById('controls').style.display = 'none'; // Ocultar controles de texto
 }
 
 function switchToOrbitMode() {
@@ -1436,6 +1440,10 @@ function switchToOrbitMode() {
     }
 
     console.log('🔄 Modo Panorámico ACTIVADO');
+
+    // Ocultar UI (Crosshair + HUD)
+    document.getElementById('game-ui').classList.add('hidden');
+    document.getElementById('controls').style.display = 'block'; // Mostrar controles de texto
 }
 
 // ============================================

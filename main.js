@@ -398,7 +398,9 @@ function addBlock(modelName, x, y, z, rotation = 0, scale = 1) {
             block.position.y,
             block.position.z + (Math.random() - 0.5) * 15
         );
-        block.userData.wanderSpeed = 0.02 + Math.random() * 0.03;
+        // Velocidad: Más veloz para Ghasts (0.05 base) que para otros (0.02 base)
+        const baseSpeed = modelName === 'ghast' ? 0.05 : 0.02;
+        block.userData.wanderSpeed = baseSpeed + Math.random() * 0.03;
         block.userData.originalY = block.position.y; // Mantener altura aproximada
 
         mobs.push(block);
@@ -1122,6 +1124,11 @@ function animate() {
             // Modo Primera Persona: Mirar al jugador
             // Ajustamos para que miren a la cámara pero manteniendo su altura (opcional, o full 3D lookAt)
             mob.lookAt(firstPersonCamera.position);
+
+            // CORRECCIÓN: Los Ghasts miran al revés por defecto, rotarlos 180° (PI)
+            if (mob.userData.blockType === 'ghast') {
+                mob.rotateY(Math.PI);
+            }
         } else {
             // Modo Órbita: Deambular suavemente
             if (!mob.userData.wanderTarget) return;
@@ -1144,6 +1151,11 @@ function animate() {
                 direction.normalize();
                 mob.position.addScaledVector(direction, mob.userData.wanderSpeed);
                 mob.lookAt(target);
+
+                // CORRECCIÓN: Rotar Ghasts 180°
+                if (mob.userData.blockType === 'ghast') {
+                    mob.rotateY(Math.PI);
+                }
             }
         }
     });
